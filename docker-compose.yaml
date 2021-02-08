@@ -1,0 +1,14 @@
+version: '3.4'
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "6831:6831"
+      - "16686:16686"
+      - "14269:14269"
+  http-server:
+    build:
+      context: .
+      dockerfile: src/http-server/Dockerfile
+    ports:
+      - "8080:8080"
