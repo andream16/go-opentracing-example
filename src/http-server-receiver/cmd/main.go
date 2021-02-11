@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -15,16 +16,32 @@ import (
 	"github.com/uber/jaeger-client-go/config"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
 	jaegerlog "github.com/uber/jaeger-client-go/log"
+	"github.com/uber/jaeger-lib/metrics"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/andream16/go-opentracing-example/src/http-server-receiver/todo"
 )
 
 func main() {
-	const (
-		hostname    = "0.0.0.0:8081"
-		serviceName = "http-server-receiver"
+	const serviceName = "http-server-receiver"
+
+	var (
+		httpServerHostname string
+		jaegerAgentHost    string
+		jaegerAgentPort    string
 	)
+
+	for k, v := range map[string]*string{
+		"HTTP_SERVER_HOSTNAME": &httpServerHostname,
+		"JAEGER_AGENT_HOST":    &jaegerAgentHost,
+		"JAEGER_AGENT_PORT":    &jaegerAgentPort,
+	} {
+		var ok bool
+		*v, ok = os.LookupEnv(k)
+		if !ok {
+			log.Fatalf("missing environment variable %s", k)
+		}
+	}
 
 	var (
 		ctx, cancel = context.WithCancel(context.Background())
@@ -40,28 +57,31 @@ func main() {
 			Param: 1,
 		},
 		Reporter: &jaegercfg.ReporterConfig{
-			LogSpans: true,
+			LogSpans:           true,
+			LocalAgentHostPort: jaegerAgentHost + ":" + jaegerAgentPort,
 		},
 	}
 
-	tracer, closer, err := cfg.NewTracer(config.Logger(jaegerlog.StdLogger))
+	tracer, closer, err := cfg.NewTracer(
+		config.Logger(jaegerlog.StdLogger),
+		config.Metrics(metrics.NullFactory),
+	)
 	if err != nil {
 		log.Fatalf("could not initialise tracer: %v", err)
 	}
 
-	// Set the singleton opentracing.Tracer with the Jaeger tracer.
 	opentracing.SetGlobalTracer(tracer)
 	defer closer.Close()
 
 	router.HandleFunc("/receiver/todo", func(w http.ResponseWriter, r *http.Request) {
-		trc := opentracing.GlobalTracer()
+		gt := opentracing.GlobalTracer()
 
-		spanCtx, err := trc.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(r.Header))
+		spanCtx, err := gt.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(r.Header))
 		if err != nil {
 			log.Println(fmt.Sprintf("could not extract tracing headers: %s", err))
 		}
 
-		span := trc.StartSpan("receiver_todo", ext.RPCServerOption(spanCtx))
+		span := gt.StartSpan("receiver_todo", ext.RPCServerOption(spanCtx))
 		defer span.Finish()
 
 		var t todo.Todo
@@ -77,7 +97,7 @@ func main() {
 	}).Methods(http.MethodPost)
 
 	server := &http.Server{
-		Addr:         hostname,
+		Addr:         httpServerHostname,
 		Handler:      router,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 5 * time.Second,
@@ -87,7 +107,7 @@ func main() {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		log.Println(fmt.Sprintf("serving traffic at %s ...", hostname))
+		log.Println(fmt.Sprintf("serving traffic at %s ...", httpServerHostname))
 		if err := server.ListenAndServe(); err != nil {
 			log.Fatalf("error while serving: %v", err)
 		}
