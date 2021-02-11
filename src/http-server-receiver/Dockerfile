@@ -4,6 +4,6 @@ WORKDIR /build
 
 COPY . .
 
-RUN go build -o /app ./src/http-server/cmd
+RUN go build -o /app ./src/http-server-receiver/cmd
 
 ENTRYPOINT ["/app"]
