@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package goopentracingexample.grpcserver.todo.v1;
+
+option go_package = "github.com/andream16/go-open-tracing-example/grpc-server/todo/v1";
+
+// TodoService is responsible for managing todos.
+service TodoService {
+  // Create creates a new todo.
+  rpc Create(CreateRequest) returns (CreateResponse);
+}
+
+message CreateRequest {
+  string message = 1;
+}
+
+message CreateResponse {}
