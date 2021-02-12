@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package goopentracingexample.grpcserver.todo.v1;
+package go_opentracing_example.grpc_server.todo.v1;
 
-option go_package = "github.com/andream16/go-open-tracing-example/grpc-server/todo/v1";
+option go_package = "github.com/andream16/go-open-tracing-example/grpc_server/todo/v1";
 
 // TodoService is responsible for managing todos.
 service TodoService {
