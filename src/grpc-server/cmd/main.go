@@ -7,8 +7,7 @@ import (
 	"net"
 	"os"
 
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
@@ -70,8 +69,7 @@ func main() {
 	defer closer.Close()
 
 	srv := grpc.NewServer(
-		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(grpc_opentracing.UnaryServerInterceptor())),
-		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer(grpc_opentracing.StreamServerInterceptor())),
+		grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer)),
 	)
 
 	todov1.RegisterTodoServiceServer(srv, todo.NewService())

@@ -10,8 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/uber/jaeger-client-go"
@@ -82,8 +81,7 @@ func main() {
 	conn, err := grpc.Dial(
 		grpcServerHostname,
 		grpc.WithInsecure(),
-		grpc.WithStreamInterceptor(grpc_middleware.ChainStreamClient(grpc_opentracing.StreamClientInterceptor())),
-		grpc.WithUnaryInterceptor(grpc_middleware.ChainUnaryClient(grpc_opentracing.UnaryClientInterceptor())),
+		grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(tracer)),
 	)
 	if err != nil {
 		log.Fatalf("could not initialise grpc client: %v", err)
@@ -111,7 +109,10 @@ func main() {
 
 		defer r.Body.Close()
 
-		if _, err := todoSvcClient.Create(r.Context(), &todov1.CreateRequest{Message: t.Message}); err != nil {
+		if _, err := todoSvcClient.Create(
+			opentracing.ContextWithSpan(r.Context(), span),
+			&todov1.CreateRequest{Message: t.Message},
+		); err != nil {
 			log.Println(fmt.Sprintf("could not create todo: %s", err))
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
