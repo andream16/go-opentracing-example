@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/uber/jaeger-client-go"
@@ -18,7 +20,9 @@ import (
 	jaegerlog "github.com/uber/jaeger-client-go/log"
 	"github.com/uber/jaeger-lib/metrics"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 
+	todov1 "github.com/andream16/go-opentracing-example/contracts/build/go/go_opentracing_example/grpc_server/todo/v1"
 	"github.com/andream16/go-opentracing-example/src/http-server-receiver/todo"
 )
 
@@ -27,12 +31,14 @@ func main() {
 
 	var (
 		httpServerHostname string
+		grpcServerHostname string
 		jaegerAgentHost    string
 		jaegerAgentPort    string
 	)
 
 	for k, v := range map[string]*string{
 		"HTTP_SERVER_HOSTNAME": &httpServerHostname,
+		"GRPC_SERVER_HOSTNAME": &grpcServerHostname,
 		"JAEGER_AGENT_HOST":    &jaegerAgentHost,
 		"JAEGER_AGENT_PORT":    &jaegerAgentPort,
 	} {
@@ -73,6 +79,18 @@ func main() {
 	opentracing.SetGlobalTracer(tracer)
 	defer closer.Close()
 
+	conn, err := grpc.Dial(
+		grpcServerHostname,
+		grpc.WithInsecure(),
+		grpc.WithStreamInterceptor(grpc_middleware.ChainStreamClient(grpc_opentracing.StreamClientInterceptor())),
+		grpc.WithUnaryInterceptor(grpc_middleware.ChainUnaryClient(grpc_opentracing.UnaryClientInterceptor())),
+	)
+	if err != nil {
+		log.Fatalf("could not initialise grpc client: %v", err)
+	}
+
+	todoSvcClient := todov1.NewTodoServiceClient(conn)
+
 	router.HandleFunc("/receiver/todo", func(w http.ResponseWriter, r *http.Request) {
 		gt := opentracing.GlobalTracer()
 
@@ -93,7 +111,11 @@ func main() {
 
 		defer r.Body.Close()
 
-		log.Println(fmt.Sprintf("new todo with messageL: %s", t.Message))
+		if _, err := todoSvcClient.Create(r.Context(), &todov1.CreateRequest{Message: t.Message}); err != nil {
+			log.Println(fmt.Sprintf("could not create todo: %s", err))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 	}).Methods(http.MethodPost)
 
 	server := &http.Server{

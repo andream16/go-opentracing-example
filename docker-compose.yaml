@@ -35,9 +35,25 @@ services:
       - HTTP_SERVER_HOSTNAME=0.0.0.0:8081
       - JAEGER_AGENT_HOST=jaeger
       - JAEGER_AGENT_PORT=6831
+      - GRPC_SERVER_HOSTNAME=grpc-server:50051
     depends_on:
       - jaeger
       - http-server-initiator
+    networks:
+      - opentracing
+  grpc-server:
+    build:
+      context: .
+      dockerfile: src/grpc-server/Dockerfile
+    ports:
+      - 50051:50051
+    environment:
+      - GRPC_SERVER_PORT=50051
+      - JAEGER_AGENT_HOST=jaeger
+      - JAEGER_AGENT_PORT=6831
+    depends_on:
+      - jaeger
+      - http-server-receiver
     networks:
       - opentracing
 
