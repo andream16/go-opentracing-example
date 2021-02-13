@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 
+	"google.golang.org/grpc/metadata"
+
 	"github.com/Shopify/sarama"
 	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc/codes"
@@ -34,6 +36,21 @@ func (svc Service) Create(ctx context.Context, req *todov1.CreateRequest) (*todo
 		return nil, status.Error(codes.InvalidArgument, "received nil request for creating a todo")
 	}
 
+	var saramaHeaders []sarama.RecordHeader
+
+	headers, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		for k, vals := range headers {
+			for _, v := range vals {
+				saramaHeaders = append(saramaHeaders, sarama.RecordHeader{
+					Key:   []byte(k),
+					Value: []byte(v),
+				})
+				break
+			}
+		}
+	}
+
 	b, err := proto.Marshal(req)
 	if err != nil {
 		log.Println(fmt.Sprintf("could not marshal request: %v", err))
@@ -41,8 +58,9 @@ func (svc Service) Create(ctx context.Context, req *todov1.CreateRequest) (*todo
 	}
 
 	if _, _, err := svc.kafkaProducer.SendMessage(&sarama.ProducerMessage{
-		Topic: svc.kafkaTopic,
-		Value: sarama.ByteEncoder(b),
+		Topic:   svc.kafkaTopic,
+		Value:   sarama.ByteEncoder(b),
+		Headers: saramaHeaders,
 	}); err != nil {
 		log.Println(fmt.Sprintf("could not produce message: %v", err))
 		return nil, status.Error(codes.Internal, "could not produce message")
