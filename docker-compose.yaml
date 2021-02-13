@@ -59,7 +59,6 @@ services:
       - GRPC_SERVER_HOSTNAME=grpc-server:50051
     depends_on:
       - jaeger
-      - http-server-initiator
     networks:
       - opentracing
   grpc-server:
@@ -77,7 +76,20 @@ services:
     depends_on:
       - jaeger
       - kafka
-      - http-server-receiver
+    networks:
+      - opentracing
+  kafka-consumer:
+    build:
+      context: .
+      dockerfile: src/kafka-consumer/Dockerfile
+    environment:
+      - KAFKA_TODO_TOPIC=todos
+      - KAFKA_BROKER_ADDRESS=kafka:9092
+      - JAEGER_AGENT_HOST=jaeger
+      - JAEGER_AGENT_PORT=6831
+    depends_on:
+      - jaeger
+      - kafka
     networks:
       - opentracing
 
