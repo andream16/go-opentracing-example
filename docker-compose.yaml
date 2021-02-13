@@ -10,6 +10,27 @@ services:
       - JAEGER_AGENT_HOST=jaeger
     networks:
       - opentracing
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    ports:
+      - 2181:2181
+    networks:
+      - opentracing
+  kafka:
+    image: wurstmeister/kafka:latest
+    hostname: kafka
+    environment:
+      - KAFKA_ADVERTISED_HOST_NAME=kafka
+      - KAFKA_ADVERTISED_PORT=9092
+      - AUTO_CREATE_TOPICS="true"
+      - KAFKA_CREATE_TOPICS="todos:1:1"
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+    ports:
+      - 9092:9092
+    depends_on:
+      - zookeeper
+    networks:
+      - opentracing
   http-server-initiator:
     build:
       context: .
@@ -49,10 +70,13 @@ services:
       - 50051:50051
     environment:
       - GRPC_SERVER_PORT=50051
+      - KAFKA_TODO_TOPIC=todos
+      - KAFKA_BROKER_ADDRESS=kafka:9092
       - JAEGER_AGENT_HOST=jaeger
       - JAEGER_AGENT_PORT=6831
     depends_on:
       - jaeger
+      - kafka
       - http-server-receiver
     networks:
       - opentracing

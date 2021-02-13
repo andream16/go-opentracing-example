@@ -5,17 +5,26 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/Shopify/sarama"
+	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	todov1 "github.com/andream16/go-opentracing-example/contracts/build/go/go_opentracing_example/grpc_server/todo/v1"
 )
 
-type Service struct{}
+// Service implements the grpc service.
+type Service struct {
+	kafkaTopic    string
+	kafkaProducer sarama.SyncProducer
+}
 
 // NewService returns a new Service.
-func NewService() Service {
-	return Service{}
+func NewService(kafkaTopic string, kafkaProducer sarama.SyncProducer) Service {
+	return Service{
+		kafkaTopic:    kafkaTopic,
+		kafkaProducer: kafkaProducer,
+	}
 }
 
 // Creates a new todo.
@@ -24,6 +33,20 @@ func (svc Service) Create(ctx context.Context, req *todov1.CreateRequest) (*todo
 		log.Println("received nil request for creating a todo")
 		return nil, status.Error(codes.InvalidArgument, "received nil request for creating a todo")
 	}
-	log.Println(fmt.Sprintf("creating a new todo with message: %s", req.Message))
+
+	b, err := proto.Marshal(req)
+	if err != nil {
+		log.Println(fmt.Sprintf("could not marshal request: %v", err))
+		return nil, status.Error(codes.Internal, "could not marshal request")
+	}
+
+	if _, _, err := svc.kafkaProducer.SendMessage(&sarama.ProducerMessage{
+		Topic: svc.kafkaTopic,
+		Value: sarama.ByteEncoder(b),
+	}); err != nil {
+		log.Println(fmt.Sprintf("could not produce message: %v", err))
+		return nil, status.Error(codes.Internal, "could not produce message")
+	}
+
 	return &todov1.CreateResponse{}, nil
 }

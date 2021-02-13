@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/Shopify/sarama"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber/jaeger-client-go"
@@ -25,15 +26,19 @@ func main() {
 	const serviceName = "grpc-server"
 
 	var (
-		grpcServerPort  string
-		jaegerAgentHost string
-		jaegerAgentPort string
+		grpcServerPort     string
+		kafkaTodoTopic     string
+		kafkaBrokerAddress string
+		jaegerAgentHost    string
+		jaegerAgentPort    string
 	)
 
 	for k, v := range map[string]*string{
-		"GRPC_SERVER_PORT":  &grpcServerPort,
-		"JAEGER_AGENT_HOST": &jaegerAgentHost,
-		"JAEGER_AGENT_PORT": &jaegerAgentPort,
+		"GRPC_SERVER_PORT":     &grpcServerPort,
+		"KAFKA_TODO_TOPIC":     &kafkaTodoTopic,
+		"KAFKA_BROKER_ADDRESS": &kafkaBrokerAddress,
+		"JAEGER_AGENT_HOST":    &jaegerAgentHost,
+		"JAEGER_AGENT_PORT":    &jaegerAgentPort,
 	} {
 		var ok bool
 		*v, ok = os.LookupEnv(k)
@@ -68,11 +73,24 @@ func main() {
 	opentracing.SetGlobalTracer(tracer)
 	defer closer.Close()
 
+	kafkaCfg := sarama.NewConfig()
+	kafkaCfg.Producer.RequiredAcks = sarama.WaitForAll
+	kafkaCfg.Producer.Retry.Max = 10
+	kafkaCfg.Producer.Return.Successes = true
+
+	kafkaProducer, err := sarama.NewSyncProducer(
+		[]string{kafkaBrokerAddress},
+		kafkaCfg,
+	)
+	if err != nil {
+		log.Fatalf("could not create new kafka producer: %v", err)
+	}
+
 	srv := grpc.NewServer(
 		grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer)),
 	)
 
-	todov1.RegisterTodoServiceServer(srv, todo.NewService())
+	todov1.RegisterTodoServiceServer(srv, todo.NewService(kafkaTodoTopic, kafkaProducer))
 
 	g, ctx := errgroup.WithContext(ctx)
 
