@@ -31,6 +31,16 @@ services:
       - zookeeper
     networks:
       - opentracing
+  db:
+    image: postgres:latest
+    environment:
+      - POSTGRES_DB=todos
+      - POSTGRES_PASSWORD=todos
+      - POSTGRES_USER=todos
+    ports:
+      - 5432:5432
+    networks:
+      - opentracing
   http-server-initiator:
     build:
       context: .
@@ -85,11 +95,13 @@ services:
     environment:
       - KAFKA_TODO_TOPIC=todos
       - KAFKA_BROKER_ADDRESS=kafka:9092
+      - DATABASE_DSN=user=todos password=todos host=db port=5432 dbname=todos sslmode=disable pool_max_conns=10
       - JAEGER_AGENT_HOST=jaeger
       - JAEGER_AGENT_PORT=6831
     depends_on:
       - jaeger
       - kafka
+      - db
     networks:
       - opentracing
 

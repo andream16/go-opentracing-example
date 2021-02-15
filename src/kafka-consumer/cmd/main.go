@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
+
+	"github.com/andream16/go-opentracing-example/src/kafka-consumer/todo/repository"
+	"github.com/andream16/go-opentracing-example/src/shared/database/postgres/pgxwrapper"
 
 	"github.com/Shopify/sarama"
 	"github.com/opentracing/opentracing-go"
@@ -27,6 +31,7 @@ func main() {
 	var (
 		kafkaTodoTopic     string
 		kafkaBrokerAddress string
+		databaseDSN        string
 		jaegerAgentHost    string
 		jaegerAgentPort    string
 	)
@@ -34,6 +39,7 @@ func main() {
 	for k, v := range map[string]*string{
 		"KAFKA_TODO_TOPIC":     &kafkaTodoTopic,
 		"KAFKA_BROKER_ADDRESS": &kafkaBrokerAddress,
+		"DATABASE_DSN":         &databaseDSN,
 		"JAEGER_AGENT_HOST":    &jaegerAgentHost,
 		"JAEGER_AGENT_PORT":    &jaegerAgentPort,
 	} {
@@ -67,6 +73,19 @@ func main() {
 		log.Fatalf("could not initialise tracer: %v", err)
 	}
 
+	executorCtx, executorCtxCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer executorCtxCancel()
+
+	executor, err := pgxwrapper.New(executorCtx, databaseDSN)
+	if err != nil {
+		log.Fatalf("could not initialise a new executor: %v", err)
+	}
+
+	repo, err := repository.New(executor)
+	if err != nil {
+		log.Fatalf("could not initialise a new repository: %v", err)
+	}
+
 	opentracing.SetGlobalTracer(tracer)
 	defer closer.Close()
 
@@ -84,7 +103,10 @@ func main() {
 		log.Fatalf("could not create new kafka consumer group: %v", err)
 	}
 
-	consumer := kafka.NewConsumer()
+	consumer, err := kafka.NewConsumer(repo)
+	if err != nil {
+		log.Fatalf("could not create new kafka consumer: %v", err)
+	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
