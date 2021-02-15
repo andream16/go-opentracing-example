@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"google.golang.org/grpc/metadata"
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/Shopify/sarama"
 	"github.com/golang/protobuf/proto"
@@ -38,17 +38,33 @@ func (svc Service) Create(ctx context.Context, req *todov1.CreateRequest) (*todo
 
 	var saramaHeaders []sarama.RecordHeader
 
-	headers, ok := metadata.FromIncomingContext(ctx)
-	if ok {
-		for k, vals := range headers {
-			for _, v := range vals {
-				saramaHeaders = append(saramaHeaders, sarama.RecordHeader{
-					Key:   []byte(k),
-					Value: []byte(v),
-				})
-				break
-			}
-		}
+	//headers, ok := metadata.FromIncomingContext(ctx)
+	//if ok {
+	//	for k, vals := range headers {
+	//		for _, v := range vals {
+	//			saramaHeaders = append(saramaHeaders, sarama.RecordHeader{
+	//				Key:   []byte(k),
+	//				Value: []byte(v),
+	//			})
+	//			break
+	//		}
+	//	}
+	//}
+
+	headers := make(map[string]string)
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		opentracing.GlobalTracer().Inject(
+			span.Context(),
+			opentracing.TextMap,
+			opentracing.TextMapCarrier(headers),
+		)
+	}
+
+	for k, v := range headers {
+		saramaHeaders = append(saramaHeaders, sarama.RecordHeader{
+			Key:   []byte(k),
+			Value: []byte(v),
+		})
 	}
 
 	b, err := proto.Marshal(req)

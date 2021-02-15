@@ -100,12 +100,6 @@ func main() {
 		span := gt.StartSpan("receiver_todo", ext.RPCServerOption(spanCtx))
 		defer span.Finish()
 
-		sp := opentracing.StartSpan("ok")
-		defer sp.Finish()
-
-		sp2 := gt.StartSpan("kek")
-		defer sp2.Finish()
-
 		var t todo.Todo
 		if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 			log.Println(fmt.Sprintf("could not deserialise request body: %s", err))

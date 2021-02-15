@@ -2,9 +2,6 @@ package kafka
 
 import (
 	"log"
-	"net/http"
-
-	"github.com/opentracing/opentracing-go/ext"
 
 	"github.com/Shopify/sarama"
 	"github.com/opentracing/opentracing-go"
@@ -34,18 +31,17 @@ func (c Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama
 			message.Topic,
 		)
 
-		h := make(http.Header, len(message.Headers))
+		headers := make(map[string]string, len(message.Headers))
 		for _, header := range message.Headers {
-			h[string(header.Key)] = []string{string(header.Value)}
+			headers[string(header.Key)] = string(header.Value)
 		}
 
-		gt := opentracing.GlobalTracer()
-
-		spanCtx, _ := gt.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(h))
-		span := gt.StartSpan("consumer", ext.RPCServerOption(spanCtx))
-		defer span.Finish()
+		spanCtx, _ := opentracing.GlobalTracer().Extract(opentracing.TextMap, opentracing.TextMapCarrier(headers))
+		span := opentracing.GlobalTracer().StartSpan("consumer", opentracing.FollowsFrom(spanCtx))
 
 		session.MarkMessage(message, "")
+
+		span.Finish()
 	}
 
 	return nil
