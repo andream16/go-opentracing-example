@@ -5,10 +5,11 @@ title Open Tracing Example
 skinparam ParticipantPadding 10
 skinparam BoxPadding 10
 
-actor plinio
+actor user
 
 box "Services" #LightBlue
-    participant "rest-service" as rest
+    participant "http-service-initiator" as initiator
+    participant "http-service-receiver" as receiver
     participant "grpc-service" as grpc
     participant "kafka-consumer" as consumer
 end box
@@ -25,17 +26,20 @@ box "Database"
     participant "database" as db
 end box
 
-plinio->rest: add a todo request
-rest->ot: create trace
-rest->grpc: add a todo request
-grpc->ot: create sub-trace
+user->initiator: add a todo request
+initiator->ot: create trace
+initiator->receiver: add a todo request
+receiver->ot: create child span
+receiver->grpc: add a todo request
+grpc->ot: create child span
 grpc->kafka: publish message in todos topic forwarding tracing headers
-rest<--grpc: ok
-plinio<--rest: ok
-kafka<--consumer: consume message and extract tracing headers and create sub-span
-consumer->ot: create sub-trace
+receiver<--grpc: ok
+initiator<--receiver: ok
+user<--rest: ok
+kafka<--consumer: consume message and extract tracing headers
+consumer->ot: create child-span
 consumer->db: save todo
-db->ot: create sub-trace
+db->ot: create child span
 db<--consumer: ok
 kafka<--consumer: commit offset
 
