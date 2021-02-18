@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
+	"time"
+
+	"github.com/andream16/go-opentracing-example/src/shared/health"
 
 	"github.com/Shopify/sarama"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
@@ -19,7 +23,9 @@ import (
 	"google.golang.org/grpc"
 
 	todov1 "github.com/andream16/go-opentracing-example/contracts/build/go/go_opentracing_example/grpc_server/todo/v1"
+	internalhealth "github.com/andream16/go-opentracing-example/src/grpc-server/health"
 	"github.com/andream16/go-opentracing-example/src/grpc-server/transport/grpc/todo"
+	transporthttp "github.com/andream16/go-opentracing-example/src/grpc-server/transport/http"
 )
 
 func main() {
@@ -31,10 +37,12 @@ func main() {
 		kafkaBrokerAddress string
 		jaegerAgentHost    string
 		jaegerAgentPort    string
+		httpServerHostname string
 	)
 
 	for k, v := range map[string]*string{
 		"GRPC_SERVER_PORT":     &grpcServerPort,
+		"HTTP_SERVER_HOSTNAME": &httpServerHostname,
 		"KAFKA_TODO_TOPIC":     &kafkaTodoTopic,
 		"KAFKA_BROKER_ADDRESS": &kafkaBrokerAddress,
 		"JAEGER_AGENT_HOST":    &jaegerAgentHost,
@@ -74,23 +82,33 @@ func main() {
 	defer closer.Close()
 
 	kafkaCfg := sarama.NewConfig()
+
 	kafkaCfg.Producer.RequiredAcks = sarama.WaitForAll
 	kafkaCfg.Producer.Retry.Max = 10
 	kafkaCfg.Producer.Return.Successes = true
 
-	kafkaProducer, err := sarama.NewSyncProducer(
-		[]string{kafkaBrokerAddress},
-		kafkaCfg,
-	)
+	kafkaProducer, err := sarama.NewSyncProducer([]string{kafkaBrokerAddress}, kafkaCfg)
 	if err != nil {
 		log.Fatalf("could not create new kafka producer: %v", err)
 	}
 
-	srv := grpc.NewServer(
+	grpcSrv := grpc.NewServer(
 		grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer)),
 	)
 
-	todov1.RegisterTodoServiceServer(srv, todo.NewService(kafkaTodoTopic, kafkaProducer))
+	todov1.RegisterTodoServiceServer(grpcSrv, todo.NewService(kafkaTodoTopic, kafkaProducer))
+
+	handler := transporthttp.NewHandler(
+		health.NewManager(internalhealth.NewKafkaChecker(nil)),
+	)
+
+	httpServ := &http.Server{
+		Addr:         httpServerHostname,
+		Handler:      handler.Router(),
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -104,13 +122,22 @@ func main() {
 
 		log.Println(fmt.Sprintf("serving traffic at 0.0.0.0:%s ...", grpcServerPort))
 
-		return srv.Serve(l)
+		return grpcSrv.Serve(l)
+	})
+
+	g.Go(func() error {
+		log.Println(fmt.Sprintf("serving traffic at 0.0.0.0:%s ...", httpServerHostname))
+		return httpServ.ListenAndServe()
 	})
 
 	g.Go(func() error {
 		<-ctx.Done()
 
-		srv.GracefulStop()
+		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		_ = httpServ.Shutdown(ctx)
+		grpcSrv.GracefulStop()
 		return nil
 	})
 

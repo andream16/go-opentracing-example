@@ -7,9 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/andream16/go-opentracing-example/src/kafka-consumer/todo/repository"
-	"github.com/andream16/go-opentracing-example/src/shared/database/postgres/pgxwrapper"
-
 	"github.com/Shopify/sarama"
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber/jaeger-client-go"
@@ -19,7 +16,9 @@ import (
 	"github.com/uber/jaeger-lib/metrics"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/andream16/go-opentracing-example/src/kafka-consumer/todo/repository"
 	"github.com/andream16/go-opentracing-example/src/kafka-consumer/transport/kafka"
+	"github.com/andream16/go-opentracing-example/src/shared/database/postgres/pgxwrapper"
 )
 
 func main() {
@@ -90,15 +89,13 @@ func main() {
 	defer closer.Close()
 
 	kafkaCfg := sarama.NewConfig()
-	kafkaCfg.Producer.RequiredAcks = sarama.WaitForAll
-	kafkaCfg.Producer.Retry.Max = 10
-	kafkaCfg.Producer.Return.Successes = true
 
-	kafkaConsumerGroup, err := sarama.NewConsumerGroup(
-		[]string{kafkaBrokerAddress},
-		kafkaGroupName,
-		kafkaCfg,
-	)
+	kafkaClient, err := sarama.NewClient([]string{kafkaBrokerAddress}, kafkaCfg)
+	if err != nil {
+		log.Fatalf("could not create new kafka client: %v", err)
+	}
+
+	kafkaConsumerGroup, err := sarama.NewConsumerGroupFromClient(kafkaGroupName, kafkaClient)
 	if err != nil {
 		log.Fatalf("could not create new kafka consumer group: %v", err)
 	}

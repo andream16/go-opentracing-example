@@ -38,19 +38,6 @@ func (svc Service) Create(ctx context.Context, req *todov1.CreateRequest) (*todo
 
 	var saramaHeaders []sarama.RecordHeader
 
-	//headers, ok := metadata.FromIncomingContext(ctx)
-	//if ok {
-	//	for k, vals := range headers {
-	//		for _, v := range vals {
-	//			saramaHeaders = append(saramaHeaders, sarama.RecordHeader{
-	//				Key:   []byte(k),
-	//				Value: []byte(v),
-	//			})
-	//			break
-	//		}
-	//	}
-	//}
-
 	headers := make(map[string]string)
 	if span := opentracing.SpanFromContext(ctx); span != nil {
 		opentracing.GlobalTracer().Inject(

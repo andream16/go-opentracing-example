@@ -79,6 +79,7 @@ services:
       - 50051:50051
     environment:
       - GRPC_SERVER_PORT=50051
+      - HTTP_SERVER_HOSTNAME=0.0.0.0:8082
       - KAFKA_TODO_TOPIC=todos
       - KAFKA_BROKER_ADDRESS=kafka:9092
       - JAEGER_AGENT_HOST=jaeger

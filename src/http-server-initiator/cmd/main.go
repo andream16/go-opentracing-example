@@ -72,7 +72,10 @@ func main() {
 	opentracing.SetGlobalTracer(tracer)
 	defer closer.Close()
 
-	handler := transporthttp.NewHandler(httpClient, httpServerReceiverHostname)
+	handler := transporthttp.NewHandler(
+		httpServerReceiverHostname,
+		httpClient,
+	)
 
 	server := &http.Server{
 		Addr:         httpServerHostname,
