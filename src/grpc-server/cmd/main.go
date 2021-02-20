@@ -6,20 +6,17 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	"github.com/opentracing/opentracing-go"
-	"github.com/uber/jaeger-client-go"
-	"github.com/uber/jaeger-client-go/config"
-	jaegercfg "github.com/uber/jaeger-client-go/config"
-	jaegerlog "github.com/uber/jaeger-client-go/log"
-	"github.com/uber/jaeger-lib/metrics"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
 	todov1 "github.com/andream16/go-opentracing-example/contracts/build/go/go_opentracing_example/grpc_server/todo/v1"
 	"github.com/andream16/go-opentracing-example/src/grpc-server/transport/grpc/todo"
+	"github.com/andream16/go-opentracing-example/src/shared/kafka"
+	"github.com/andream16/go-opentracing-example/src/shared/tracing"
 )
 
 func main() {
@@ -50,47 +47,30 @@ func main() {
 	var ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg := jaegercfg.Configuration{
-		ServiceName: serviceName,
-		Sampler: &jaegercfg.SamplerConfig{
-			Type:  jaeger.SamplerTypeConst,
-			Param: 1,
-		},
-		Reporter: &jaegercfg.ReporterConfig{
-			LogSpans:           true,
-			LocalAgentHostPort: jaegerAgentHost + ":" + jaegerAgentPort,
-		},
-	}
-
-	tracer, closer, err := cfg.NewTracer(
-		config.Logger(jaegerlog.StdLogger),
-		config.Metrics(metrics.NullFactory),
-	)
-	if err != nil {
-		log.Fatalf("could not initialise tracer: %v", err)
-	}
-
-	opentracing.SetGlobalTracer(tracer)
-	defer closer.Close()
+	tracer := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
+	defer tracer.Close()
 
 	kafkaCfg := sarama.NewConfig()
+
 	kafkaCfg.Producer.RequiredAcks = sarama.WaitForAll
 	kafkaCfg.Producer.Retry.Max = 10
 	kafkaCfg.Producer.Return.Successes = true
 
-	kafkaProducer, err := sarama.NewSyncProducer(
-		[]string{kafkaBrokerAddress},
-		kafkaCfg,
-	)
+	kafkaClient, err := kafka.NewClient([]string{kafkaBrokerAddress}, kafkaCfg, time.Second*10)
+	if err != nil {
+		log.Fatalf("could not create new kafka client: %v", err)
+	}
+
+	kafkaProducer, err := kafka.NewSyncProducer(kafkaClient)
 	if err != nil {
 		log.Fatalf("could not create new kafka producer: %v", err)
 	}
 
-	srv := grpc.NewServer(
+	grpcSrv := grpc.NewServer(
 		grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer)),
 	)
 
-	todov1.RegisterTodoServiceServer(srv, todo.NewService(kafkaTodoTopic, kafkaProducer))
+	todov1.RegisterTodoServiceServer(grpcSrv, todo.NewService(kafkaTodoTopic, kafkaProducer, tracer))
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -104,13 +84,16 @@ func main() {
 
 		log.Println(fmt.Sprintf("serving traffic at 0.0.0.0:%s ...", grpcServerPort))
 
-		return srv.Serve(l)
+		return grpcSrv.Serve(l)
 	})
 
 	g.Go(func() error {
 		<-ctx.Done()
 
-		srv.GracefulStop()
+		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		grpcSrv.GracefulStop()
 		return nil
 	})
 

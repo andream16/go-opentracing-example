@@ -7,19 +7,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/andream16/go-opentracing-example/src/kafka-consumer/todo/repository"
-	"github.com/andream16/go-opentracing-example/src/shared/database/postgres/pgxwrapper"
-
 	"github.com/Shopify/sarama"
-	"github.com/opentracing/opentracing-go"
-	"github.com/uber/jaeger-client-go"
-	"github.com/uber/jaeger-client-go/config"
-	jaegercfg "github.com/uber/jaeger-client-go/config"
-	jaegerlog "github.com/uber/jaeger-client-go/log"
-	"github.com/uber/jaeger-lib/metrics"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/andream16/go-opentracing-example/src/kafka-consumer/transport/kafka"
+	"github.com/andream16/go-opentracing-example/src/kafka-consumer/todo/repository"
+	transportkafka "github.com/andream16/go-opentracing-example/src/kafka-consumer/transport/kafka"
+	"github.com/andream16/go-opentracing-example/src/shared/database/postgres/pgxwrapper"
+	"github.com/andream16/go-opentracing-example/src/shared/kafka"
+	"github.com/andream16/go-opentracing-example/src/shared/tracing"
 )
 
 func main() {
@@ -53,30 +48,10 @@ func main() {
 	var ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg := jaegercfg.Configuration{
-		ServiceName: serviceName,
-		Sampler: &jaegercfg.SamplerConfig{
-			Type:  jaeger.SamplerTypeConst,
-			Param: 1,
-		},
-		Reporter: &jaegercfg.ReporterConfig{
-			LogSpans:           true,
-			LocalAgentHostPort: jaegerAgentHost + ":" + jaegerAgentPort,
-		},
-	}
+	tracer := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
+	defer tracer.Close()
 
-	tracer, closer, err := cfg.NewTracer(
-		config.Logger(jaegerlog.StdLogger),
-		config.Metrics(metrics.NullFactory),
-	)
-	if err != nil {
-		log.Fatalf("could not initialise tracer: %v", err)
-	}
-
-	executorCtx, executorCtxCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer executorCtxCancel()
-
-	executor, err := pgxwrapper.New(executorCtx, databaseDSN)
+	executor, err := pgxwrapper.New(ctx, databaseDSN, 10*time.Second, tracer)
 	if err != nil {
 		log.Fatalf("could not initialise a new executor: %v", err)
 	}
@@ -86,24 +61,19 @@ func main() {
 		log.Fatalf("could not initialise a new repository: %v", err)
 	}
 
-	opentracing.SetGlobalTracer(tracer)
-	defer closer.Close()
-
 	kafkaCfg := sarama.NewConfig()
-	kafkaCfg.Producer.RequiredAcks = sarama.WaitForAll
-	kafkaCfg.Producer.Retry.Max = 10
-	kafkaCfg.Producer.Return.Successes = true
 
-	kafkaConsumerGroup, err := sarama.NewConsumerGroup(
-		[]string{kafkaBrokerAddress},
-		kafkaGroupName,
-		kafkaCfg,
-	)
+	kafkaClient, err := kafka.NewClient([]string{kafkaBrokerAddress}, kafkaCfg, 10*time.Second)
+	if err != nil {
+		log.Fatalf("could not create new kafka client: %v", err)
+	}
+
+	kafkaConsumerGroup, err := kafka.NewConsumerGroup(kafkaGroupName, kafkaClient)
 	if err != nil {
 		log.Fatalf("could not create new kafka consumer group: %v", err)
 	}
 
-	consumer, err := kafka.NewConsumer(repo)
+	consumer, err := transportkafka.NewConsumer(repo, tracer)
 	if err != nil {
 		log.Fatalf("could not create new kafka consumer: %v", err)
 	}

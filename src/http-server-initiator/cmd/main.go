@@ -8,15 +8,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
-	"github.com/uber/jaeger-client-go"
-	"github.com/uber/jaeger-client-go/config"
-	jaegercfg "github.com/uber/jaeger-client-go/config"
-	jaegerlog "github.com/uber/jaeger-client-go/log"
-	"github.com/uber/jaeger-lib/metrics"
 	"golang.org/x/sync/errgroup"
 
 	transporthttp "github.com/andream16/go-opentracing-example/src/http-server-initiator/transport/http"
+	"github.com/andream16/go-opentracing-example/src/shared/tracing"
 )
 
 func main() {
@@ -49,30 +44,14 @@ func main() {
 
 	defer cancel()
 
-	cfg := jaegercfg.Configuration{
-		ServiceName: serviceName,
-		Sampler: &jaegercfg.SamplerConfig{
-			Type:  jaeger.SamplerTypeConst,
-			Param: 1,
-		},
-		Reporter: &jaegercfg.ReporterConfig{
-			LogSpans:           true,
-			LocalAgentHostPort: jaegerAgentHost + ":" + jaegerAgentPort,
-		},
-	}
+	tracer := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
+	defer tracer.Close()
 
-	tracer, closer, err := cfg.NewTracer(
-		config.Logger(jaegerlog.StdLogger),
-		config.Metrics(metrics.NullFactory),
+	handler := transporthttp.NewHandler(
+		httpServerReceiverHostname,
+		httpClient,
+		tracer,
 	)
-	if err != nil {
-		log.Fatalf("could not initialise tracer: %v", err)
-	}
-
-	opentracing.SetGlobalTracer(tracer)
-	defer closer.Close()
-
-	handler := transporthttp.NewHandler(httpClient, httpServerReceiverHostname)
 
 	server := &http.Server{
 		Addr:         httpServerHostname,

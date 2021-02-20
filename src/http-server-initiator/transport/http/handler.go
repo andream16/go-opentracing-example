@@ -14,9 +14,9 @@ import (
 )
 
 func (h Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
-	gt, receiverURL := opentracing.GlobalTracer(), h.receiverHostname+"/receiver/todo"
+	receiverURL := h.receiverHostname + "/receiver/todo"
 
-	span := gt.StartSpan("initiator_todo")
+	span := h.tracer.StartSpan("initiator_todo")
 	defer span.Finish()
 
 	var t todo.Todo
@@ -46,7 +46,7 @@ func (h Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 	ext.HTTPUrl.Set(span, receiverURL)
 	ext.HTTPMethod.Set(span, http.MethodPost)
 
-	if err := gt.Inject(span.Context(), opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(req.Header)); err != nil {
+	if err := h.tracer.Inject(span.Context(), opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(req.Header)); err != nil {
 		log.Println(fmt.Sprintf("could not inject tracing headers: %s", err))
 	}
 
