@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/opentracing/opentracing-go"
 
 	todov1 "github.com/andream16/go-opentracing-example/contracts/build/go/go_opentracing_example/grpc_server/todo/v1"
 )
@@ -12,17 +13,18 @@ import (
 type Handler struct {
 	todoSvcClient todov1.TodoServiceClient
 	router        *mux.Router
+	tracer        opentracing.Tracer
 }
 
 // NewHandler returns a new http handler.
-func NewHandler(todoSvcClient todov1.TodoServiceClient) Handler {
+func NewHandler(todoSvcClient todov1.TodoServiceClient, tracer opentracing.Tracer) Handler {
 	handler := Handler{
 		todoSvcClient: todoSvcClient,
 		router:        mux.NewRouter(),
+		tracer:        tracer,
 	}
 
 	handler.Router().HandleFunc("/receiver/todo", handler.CreateTodo).Methods(http.MethodPost)
-	handler.Router().HandleFunc("/_health", func(w http.ResponseWriter, r *http.Request) {}).Methods(http.MethodGet)
 
 	return handler
 }

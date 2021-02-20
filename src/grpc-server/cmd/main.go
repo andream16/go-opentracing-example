@@ -5,27 +5,18 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"time"
 
-	"github.com/andream16/go-opentracing-example/src/shared/health"
-
 	"github.com/Shopify/sarama"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	"github.com/opentracing/opentracing-go"
-	"github.com/uber/jaeger-client-go"
-	"github.com/uber/jaeger-client-go/config"
-	jaegercfg "github.com/uber/jaeger-client-go/config"
-	jaegerlog "github.com/uber/jaeger-client-go/log"
-	"github.com/uber/jaeger-lib/metrics"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
 	todov1 "github.com/andream16/go-opentracing-example/contracts/build/go/go_opentracing_example/grpc_server/todo/v1"
-	internalhealth "github.com/andream16/go-opentracing-example/src/grpc-server/health"
 	"github.com/andream16/go-opentracing-example/src/grpc-server/transport/grpc/todo"
-	transporthttp "github.com/andream16/go-opentracing-example/src/grpc-server/transport/http"
+	"github.com/andream16/go-opentracing-example/src/shared/kafka"
+	"github.com/andream16/go-opentracing-example/src/shared/tracing"
 )
 
 func main() {
@@ -58,28 +49,8 @@ func main() {
 	var ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg := jaegercfg.Configuration{
-		ServiceName: serviceName,
-		Sampler: &jaegercfg.SamplerConfig{
-			Type:  jaeger.SamplerTypeConst,
-			Param: 1,
-		},
-		Reporter: &jaegercfg.ReporterConfig{
-			LogSpans:           true,
-			LocalAgentHostPort: jaegerAgentHost + ":" + jaegerAgentPort,
-		},
-	}
-
-	tracer, closer, err := cfg.NewTracer(
-		config.Logger(jaegerlog.StdLogger),
-		config.Metrics(metrics.NullFactory),
-	)
-	if err != nil {
-		log.Fatalf("could not initialise tracer: %v", err)
-	}
-
-	opentracing.SetGlobalTracer(tracer)
-	defer closer.Close()
+	tracer := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
+	defer tracer.Close()
 
 	kafkaCfg := sarama.NewConfig()
 
@@ -87,7 +58,12 @@ func main() {
 	kafkaCfg.Producer.Retry.Max = 10
 	kafkaCfg.Producer.Return.Successes = true
 
-	kafkaProducer, err := sarama.NewSyncProducer([]string{kafkaBrokerAddress}, kafkaCfg)
+	kafkaClient, err := kafka.NewClient([]string{kafkaBrokerAddress}, kafkaCfg, time.Second*10)
+	if err != nil {
+		log.Fatalf("could not create new kafka client: %v", err)
+	}
+
+	kafkaProducer, err := kafka.NewSyncProducer(kafkaClient)
 	if err != nil {
 		log.Fatalf("could not create new kafka producer: %v", err)
 	}
@@ -96,19 +72,7 @@ func main() {
 		grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer)),
 	)
 
-	todov1.RegisterTodoServiceServer(grpcSrv, todo.NewService(kafkaTodoTopic, kafkaProducer))
-
-	handler := transporthttp.NewHandler(
-		health.NewManager(internalhealth.NewKafkaChecker(nil)),
-	)
-
-	httpServ := &http.Server{
-		Addr:         httpServerHostname,
-		Handler:      handler.Router(),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 5 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
+	todov1.RegisterTodoServiceServer(grpcSrv, todo.NewService(kafkaTodoTopic, kafkaProducer, tracer))
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -126,17 +90,11 @@ func main() {
 	})
 
 	g.Go(func() error {
-		log.Println(fmt.Sprintf("serving traffic at 0.0.0.0:%s ...", httpServerHostname))
-		return httpServ.ListenAndServe()
-	})
-
-	g.Go(func() error {
 		<-ctx.Done()
 
 		ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		_ = httpServ.Shutdown(ctx)
 		grpcSrv.GracefulStop()
 		return nil
 	})

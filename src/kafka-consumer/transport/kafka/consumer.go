@@ -12,21 +12,29 @@ import (
 
 	todov1 "github.com/andream16/go-opentracing-example/contracts/build/go/go_opentracing_example/grpc_server/todo/v1"
 	"github.com/andream16/go-opentracing-example/src/kafka-consumer/todo/repository"
+	"github.com/andream16/go-opentracing-example/src/shared/tracing"
 )
 
 const spanName = "todo_consumer"
 
 // Consumer represent a kafka transport consumer.
 type Consumer struct {
-	repo repository.Creator
+	repo   repository.Creator
+	tracer tracing.Tracer
 }
 
 // NewConsumer returns a new consumer.
-func NewConsumer(repo repository.Creator) (Consumer, error) {
-	if repo == nil {
+func NewConsumer(repo repository.Creator, tracer tracing.Tracer) (Consumer, error) {
+	switch {
+	case repo == nil:
 		return Consumer{}, errors.New("repo could not be nil")
+	case tracer == nil:
+		return Consumer{}, errors.New("tracer could not be nil")
 	}
-	return Consumer{repo: repo}, nil
+	return Consumer{
+		repo:   repo,
+		tracer: tracer,
+	}, nil
 }
 
 func (c Consumer) Setup(sarama.ConsumerGroupSession) error {
@@ -57,7 +65,7 @@ func (c Consumer) ReceivedMessage(message *sarama.ConsumerMessage) error {
 
 	var span opentracing.Span
 
-	spanCtx, err := opentracing.GlobalTracer().Extract(opentracing.TextMap, opentracing.TextMapCarrier(headers))
+	spanCtx, err := c.tracer.Extract(opentracing.TextMap, opentracing.TextMapCarrier(headers))
 	if err == nil {
 		span = opentracing.GlobalTracer().StartSpan(spanName, opentracing.FollowsFrom(spanCtx))
 	} else {

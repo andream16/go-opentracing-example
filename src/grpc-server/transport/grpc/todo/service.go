@@ -5,27 +5,30 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/opentracing/opentracing-go"
-
 	"github.com/Shopify/sarama"
 	"github.com/golang/protobuf/proto"
+	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	todov1 "github.com/andream16/go-opentracing-example/contracts/build/go/go_opentracing_example/grpc_server/todo/v1"
+	"github.com/andream16/go-opentracing-example/src/shared/kafka"
+	"github.com/andream16/go-opentracing-example/src/shared/tracing"
 )
 
 // Service implements the grpc service.
 type Service struct {
 	kafkaTopic    string
-	kafkaProducer sarama.SyncProducer
+	kafkaProducer kafka.SyncProducer
+	tracer        tracing.Tracer
 }
 
 // NewService returns a new Service.
-func NewService(kafkaTopic string, kafkaProducer sarama.SyncProducer) Service {
+func NewService(kafkaTopic string, kafkaProducer kafka.SyncProducer, tracer tracing.Tracer) Service {
 	return Service{
 		kafkaTopic:    kafkaTopic,
 		kafkaProducer: kafkaProducer,
+		tracer:        tracer,
 	}
 }
 
@@ -40,7 +43,7 @@ func (svc Service) Create(ctx context.Context, req *todov1.CreateRequest) (*todo
 
 	headers := make(map[string]string)
 	if span := opentracing.SpanFromContext(ctx); span != nil {
-		opentracing.GlobalTracer().Inject(
+		_ = svc.tracer.Inject(
 			span.Context(),
 			opentracing.TextMap,
 			opentracing.TextMapCarrier(headers),
@@ -60,7 +63,7 @@ func (svc Service) Create(ctx context.Context, req *todov1.CreateRequest) (*todo
 		return nil, status.Error(codes.Internal, "could not marshal request")
 	}
 
-	if _, _, err := svc.kafkaProducer.SendMessage(&sarama.ProducerMessage{
+	if err := svc.kafkaProducer.SendMessage(&sarama.ProducerMessage{
 		Topic:   svc.kafkaTopic,
 		Value:   sarama.ByteEncoder(b),
 		Headers: saramaHeaders,

@@ -3,6 +3,7 @@ package pgxwrapper
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/opentracing/opentracing-go"
@@ -16,20 +17,26 @@ type PgxWrapper struct {
 
 // New returns a new PgxWrapper given a postgresql dsn.
 // The wrapper has built in tracing.
-func New(ctx context.Context, dsn string) (PgxWrapper, error) {
+// The connection will be retried until completion.
+func New(
+	ctx context.Context,
+	dsn string,
+	waitFor time.Duration,
+	tracer opentracing.Tracer,
+) (PgxWrapper, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return PgxWrapper{}, fmt.Errorf("could not create new connection configuration: %w", err)
 	}
 
-	pool, err := pgxpool.ConnectConfig(ctx, cfg)
+	pool, err := newPgxPool(ctx, cfg, waitFor)
 	if err != nil {
 		return PgxWrapper{}, fmt.Errorf("could not create new connection pool: %w", err)
 	}
 
 	return PgxWrapper{
 		pool:   pool,
-		tracer: opentracing.GlobalTracer(),
+		tracer: tracer,
 	}, nil
 }
 
@@ -41,4 +48,17 @@ func (p PgxWrapper) Exec(ctx context.Context, queryName, sql string, args ...int
 	// TODO implement me!
 
 	return nil
+}
+
+func newPgxPool(ctx context.Context, config *pgxpool.Config, waitFor time.Duration) (*pgxpool.Pool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.ConnectConfig(ctx, config)
+	if err != nil {
+		time.Sleep(waitFor)
+		return newPgxPool(ctx, config, waitFor)
+	}
+
+	return pool, nil
 }

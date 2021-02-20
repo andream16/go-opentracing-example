@@ -14,14 +14,12 @@ import (
 )
 
 func (h Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
-	gt := opentracing.GlobalTracer()
-
-	spanCtx, err := gt.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(r.Header))
+	spanCtx, err := h.tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(r.Header))
 	if err != nil {
 		log.Println(fmt.Sprintf("could not extract tracing headers: %s", err))
 	}
 
-	span := gt.StartSpan("receiver_todo", ext.RPCServerOption(spanCtx))
+	span := h.tracer.StartSpan("receiver_todo", ext.RPCServerOption(spanCtx))
 	defer span.Finish()
 
 	var t todo.Todo
