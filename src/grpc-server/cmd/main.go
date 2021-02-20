@@ -28,12 +28,10 @@ func main() {
 		kafkaBrokerAddress string
 		jaegerAgentHost    string
 		jaegerAgentPort    string
-		httpServerHostname string
 	)
 
 	for k, v := range map[string]*string{
 		"GRPC_SERVER_PORT":     &grpcServerPort,
-		"HTTP_SERVER_HOSTNAME": &httpServerHostname,
 		"KAFKA_TODO_TOPIC":     &kafkaTodoTopic,
 		"KAFKA_BROKER_ADDRESS": &kafkaBrokerAddress,
 		"JAEGER_AGENT_HOST":    &jaegerAgentHost,
