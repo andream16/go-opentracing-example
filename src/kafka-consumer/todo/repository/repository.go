@@ -29,7 +29,7 @@ func New(executor postgres.Executor) (TodoCreator, error) {
 	}, nil
 }
 
-// Create inserts a new todo in the todosTableName table.
+// Create inserts a new todo in the todos table.
 func (tc TodoCreator) Create(ctx context.Context, todo *Todo) error {
 	const createTodosQueryName = "create_todos"
 
