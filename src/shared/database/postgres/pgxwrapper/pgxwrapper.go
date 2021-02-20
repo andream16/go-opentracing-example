@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v4"
+
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/opentracing/opentracing-go"
 )
@@ -45,9 +47,20 @@ func (p PgxWrapper) Exec(ctx context.Context, queryName, sql string, args ...int
 	span, _ := opentracing.StartSpanFromContext(ctx, queryName)
 	span.Finish()
 
-	// TODO implement me!
+	if _, err := p.pool.Exec(ctx, sql, args...); err != nil {
+		return fmt.Errorf("could not execute query: %w", err)
+	}
 
 	return nil
+}
+
+// GetConn returns the underlying pgx connection.
+func (p PgxWrapper) GetConn(ctx context.Context) (*pgx.Conn, error) {
+	conn, err := p.pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not acquire connection: %w", err)
+	}
+	return conn.Conn(), nil
 }
 
 func newPgxPool(ctx context.Context, config *pgxpool.Config, waitFor time.Duration) (*pgxpool.Pool, error) {

@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/andream16/go-opentracing-example/src/shared/database/postgres/migrator"
+
 	"github.com/Shopify/sarama"
 	"golang.org/x/sync/errgroup"
 
@@ -54,6 +56,31 @@ func main() {
 	executor, err := pgxwrapper.New(ctx, databaseDSN, 10*time.Second, tracer)
 	if err != nil {
 		log.Fatalf("could not initialise a new executor: %v", err)
+	}
+
+	migrationCtx, migrationCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer migrationCancel()
+
+	migrationConn, err := executor.GetConn(migrationCtx)
+	if err != nil {
+		log.Fatalf("could not get migration connection: %v", err)
+	}
+
+	defer migrationConn.Close(ctx)
+
+	m, err := migrator.NewPgxMigrator(migrationCtx, migrationConn, "v1")
+	if err != nil {
+		log.Fatalf("could not create a new migration: %v", err)
+	}
+
+	m.AppendMigration(
+		"create_todo_table",
+		"CREATE TABLE todos (id SERIAL PRIMARY KEY, message TEXT);",
+		"DROP TABLE todos;",
+	)
+
+	if err := m.Migrate(ctx); err != nil {
+		log.Fatalf("could not run migration: %v", err)
 	}
 
 	repo, err := repository.New(executor)

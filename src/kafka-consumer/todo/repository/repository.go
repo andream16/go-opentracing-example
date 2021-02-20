@@ -8,11 +8,6 @@ import (
 	"github.com/andream16/go-opentracing-example/src/shared/database/postgres"
 )
 
-const (
-	todosTableName              = "todos"
-	todosTableMessageColumnName = "message"
-)
-
 // Creator describes the creator interface.
 type Creator interface {
 	// Create creates a new todo.
@@ -41,9 +36,7 @@ func (tc TodoCreator) Create(ctx context.Context, todo *Todo) error {
 	if err := tc.executor.Exec(
 		ctx,
 		createTodosQueryName,
-		`INSERT INTO $1($2) VALUES($3)`,
-		todosTableName,
-		todosTableMessageColumnName,
+		`INSERT INTO todos(message) VALUES($1::text)`,
 		todo.Message,
 	); err != nil {
 		return fmt.Errorf("could not insert todo: %w", err)

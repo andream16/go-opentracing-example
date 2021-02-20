@@ -67,7 +67,7 @@ func (c Consumer) ReceivedMessage(message *sarama.ConsumerMessage) error {
 
 	spanCtx, err := c.tracer.Extract(opentracing.TextMap, opentracing.TextMapCarrier(headers))
 	if err == nil {
-		span = opentracing.GlobalTracer().StartSpan(spanName, opentracing.FollowsFrom(spanCtx))
+		span = c.tracer.StartSpan(spanName, opentracing.FollowsFrom(spanCtx))
 	} else {
 		span = opentracing.StartSpan(spanName)
 		log.Printf("could not create span: %v", err)
