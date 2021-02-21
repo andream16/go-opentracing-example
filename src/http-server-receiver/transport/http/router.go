@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -16,17 +17,34 @@ type Handler struct {
 	tracer        opentracing.Tracer
 }
 
+// InvalidHandlerParameterError is used when an invalid parameter is passed to NewHandler.
+type InvalidHandlerParameterError struct {
+	parameter string
+	reason    string
+}
+
+func (i InvalidHandlerParameterError) Error() string {
+	return fmt.Sprintf("invalid parameter %s: %s", i.parameter, i.reason)
+}
+
 // NewHandler returns a new http handler.
-func NewHandler(todoSvcClient todov1.TodoServiceClient, tracer opentracing.Tracer) Handler {
-	handler := Handler{
-		todoSvcClient: todoSvcClient,
-		router:        mux.NewRouter(),
-		tracer:        tracer,
+func NewHandler(todoSvcClient todov1.TodoServiceClient, tracer opentracing.Tracer) (Handler, error) {
+	handler := Handler{}
+
+	switch {
+	case todoSvcClient == nil:
+		return handler, InvalidHandlerParameterError{parameter: "todoSvcClient", reason: "cannot be nil"}
+	case tracer == nil:
+		return handler, InvalidHandlerParameterError{parameter: "tracer", reason: "cannot be nil"}
 	}
+
+	handler.todoSvcClient = todoSvcClient
+	handler.tracer = tracer
+	handler.router = mux.NewRouter()
 
 	handler.Router().HandleFunc("/receiver/todo", handler.CreateTodo).Methods(http.MethodPost)
 
-	return handler
+	return handler, nil
 }
 
 // Router returns the inner router.

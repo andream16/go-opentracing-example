@@ -47,11 +47,14 @@ func main() {
 	tracer := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
 	defer tracer.Close()
 
-	handler := transporthttp.NewHandler(
+	handler, err := transporthttp.NewHandler(
 		httpServerReceiverHostname,
 		httpClient,
 		tracer,
 	)
+	if err != nil {
+		log.Fatalf("could not create handler: %v", err)
+	}
 
 	server := &http.Server{
 		Addr:         httpServerHostname,
