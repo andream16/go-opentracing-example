@@ -10,7 +10,7 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 
 	todov1 "github.com/andream16/go-opentracing-example/contracts/build/go/go_opentracing_example/grpc_server/todo/v1"
-	"github.com/andream16/go-opentracing-example/src/http-server-initiator/todo"
+	"github.com/andream16/go-opentracing-example/src/shared/todo"
 )
 
 func (h Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +25,7 @@ func (h Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 	var t todo.Todo
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 		log.Println(fmt.Sprintf("could not deserialise request body: %s", err))
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 

@@ -7,10 +7,9 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/andream16/go-opentracing-example/src/shared/todo"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-
-	"github.com/andream16/go-opentracing-example/src/http-server-initiator/todo"
 )
 
 func (h Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +41,6 @@ func (h Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ext.SpanKindRPCClient.Set(span)
 	ext.HTTPUrl.Set(span, receiverURL)
 	ext.HTTPMethod.Set(span, http.MethodPost)
 
@@ -50,9 +48,15 @@ func (h Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 		log.Println(fmt.Sprintf("could not inject tracing headers: %s", err))
 	}
 
-	if _, err := h.httpClient.Do(req); err != nil {
+	resp, err := h.doer.Do(req)
+	if err != nil {
 		log.Println(fmt.Sprintf("could not perform receiver request: %s", err))
 		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 }

@@ -55,7 +55,10 @@ func main() {
 		log.Fatalf("could not initialise grpc client: %v", err)
 	}
 
-	handler := transporthttp.NewHandler(todov1.NewTodoServiceClient(conn), tracer)
+	handler, err := transporthttp.NewHandler(todov1.NewTodoServiceClient(conn), tracer)
+	if err != nil {
+		log.Fatalf("could not create a new handler: %v", err)
+	}
 
 	server := &http.Server{
 		Addr:         httpServerHostname,

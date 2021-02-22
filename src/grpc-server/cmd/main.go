@@ -66,11 +66,16 @@ func main() {
 		log.Fatalf("could not create new kafka producer: %v", err)
 	}
 
+	service, err := todo.NewService(kafkaTodoTopic, kafkaProducer, tracer)
+	if err != nil {
+		log.Fatalf("could not create new service: %v", err)
+	}
+
 	grpcSrv := grpc.NewServer(
 		grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer)),
 	)
 
-	todov1.RegisterTodoServiceServer(grpcSrv, todo.NewService(kafkaTodoTopic, kafkaProducer, tracer))
+	todov1.RegisterTodoServiceServer(grpcSrv, service)
 
 	g, ctx := errgroup.WithContext(ctx)
 

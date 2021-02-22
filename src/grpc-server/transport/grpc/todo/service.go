@@ -18,18 +18,46 @@ import (
 
 // Service implements the grpc service.
 type Service struct {
-	kafkaTopic    string
-	kafkaProducer kafka.SyncProducer
-	tracer        tracing.Tracer
+	kafkaTopic string
+	sender     kafka.Sender
+	tracer     tracing.Tracer
+}
+
+// InvalidServiceParameterError is used when an invalid parameter is supplied to NewService.
+type InvalidServiceParameterError struct {
+	parameter string
+	reason    string
+}
+
+func (i InvalidServiceParameterError) Error() string {
+	return fmt.Sprintf("invalid parameter %s: %s", i.parameter, i.reason)
 }
 
 // NewService returns a new Service.
-func NewService(kafkaTopic string, kafkaProducer kafka.SyncProducer, tracer tracing.Tracer) Service {
-	return Service{
-		kafkaTopic:    kafkaTopic,
-		kafkaProducer: kafkaProducer,
-		tracer:        tracer,
+func NewService(kafkaTopic string, sender kafka.Sender, tracer tracing.Tracer) (Service, error) {
+	switch {
+	case kafkaTopic == "":
+		return Service{}, InvalidServiceParameterError{
+			parameter: "kafka topic",
+			reason:    "must be not empty",
+		}
+	case sender == nil:
+		return Service{}, InvalidServiceParameterError{
+			parameter: "sender",
+			reason:    "must be not nil",
+		}
+	case tracer == nil:
+		return Service{}, InvalidServiceParameterError{
+			parameter: "tracer",
+			reason:    "must be not nil",
+		}
 	}
+
+	return Service{
+		kafkaTopic: kafkaTopic,
+		sender:     sender,
+		tracer:     tracer,
+	}, nil
 }
 
 // Creates a new todo.
@@ -63,7 +91,7 @@ func (svc Service) Create(ctx context.Context, req *todov1.CreateRequest) (*todo
 		return nil, status.Error(codes.Internal, "could not marshal request")
 	}
 
-	if err := svc.kafkaProducer.SendMessage(&sarama.ProducerMessage{
+	if err := svc.sender.SendMessage(&sarama.ProducerMessage{
 		Topic:   svc.kafkaTopic,
 		Value:   sarama.ByteEncoder(b),
 		Headers: saramaHeaders,

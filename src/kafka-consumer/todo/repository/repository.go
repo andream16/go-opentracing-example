@@ -6,12 +6,13 @@ import (
 	"fmt"
 
 	"github.com/andream16/go-opentracing-example/src/shared/database/postgres"
+	"github.com/andream16/go-opentracing-example/src/shared/todo"
 )
 
 // Creator describes the creator interface.
 type Creator interface {
 	// Create creates a new todo.
-	Create(ctx context.Context, todo *Todo) error
+	Create(ctx context.Context, todo *todo.Todo) error
 }
 
 // TodoCreator is the todos repository.
@@ -30,7 +31,7 @@ func New(executor postgres.Executor) (TodoCreator, error) {
 }
 
 // Create inserts a new todo in the todos table.
-func (tc TodoCreator) Create(ctx context.Context, todo *Todo) error {
+func (tc TodoCreator) Create(ctx context.Context, todo *todo.Todo) error {
 	const createTodosQueryName = "create_todos"
 
 	if err := tc.executor.Exec(
