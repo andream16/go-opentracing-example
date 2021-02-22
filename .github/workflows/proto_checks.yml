@@ -1,0 +1,21 @@
+name: proto_checks
+
+on: [pull_request]
+
+jobs:
+  proto_checks:
+    name: proto lint and breaking changes detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: wizhi/setup-buf@v1
+        with:
+          version: '0.36.0'
+
+      - name: Fetching base branch
+        run: |
+          git fetch -u origin ${{ github.base_ref }}:${{ github.base_ref }}
+      - name: Running linter, checking breaking changes
+        run: |
+          buf lint
+          buf breaking --against ".git#branch=${{ github.base_ref }}"
