@@ -17,7 +17,4 @@ As you can see:
 You can run the project using `docker-compose up` (tbd)
 
 ## TODOS
- - Decorate traces to make search easier.
- - Use custom log (zap).
- - Investigate on metrics factory.
  - Write solid documentation.

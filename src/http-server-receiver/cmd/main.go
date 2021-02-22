@@ -43,7 +43,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	tracer := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
+	tracer, err := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
+	if err != nil {
+		log.Fatalf("could not create new tracer: %v", err)
+	}
 	defer tracer.Close()
 
 	conn, err := grpc.Dial(
