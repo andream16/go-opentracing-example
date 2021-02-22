@@ -28,7 +28,7 @@ func TestNewHandler(t *testing.T) {
 		require.Error(t, err)
 		var e transporthttp.InvalidHandlerParameterError
 		assert.True(t, errors.As(err, &e))
-		assert.Equal(t, "invalid parameter httpClient: cannot be nil", err.Error())
+		assert.Equal(t, "invalid parameter doer: cannot be nil", err.Error())
 		assert.Empty(t, handler)
 	})
 	t.Run("it should return an error because the tracer is invalid", func(t *testing.T) {
