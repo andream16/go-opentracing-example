@@ -1,15 +1,16 @@
 package tracing
 
 import (
+	"fmt"
 	"io"
 	"log"
+
+	"github.com/andream16/go-opentracing-example/src/shared/logging"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
-	jaegerlog "github.com/uber/jaeger-client-go/log"
-	"github.com/uber/jaeger-lib/metrics"
 )
 
 // Tracer defines the open tracing interface.
@@ -27,7 +28,12 @@ type JaegerTracer struct {
 }
 
 // NewJaegerTracer returns a traces with defaults.
-func NewJaegerTracer(serviceName, reporterHostName, reporterPort string) Tracer {
+func NewJaegerTracer(serviceName, reporterHostName, reporterPort string) (Tracer, error) {
+	logger, err := logging.NewZapLogger()
+	if err != nil {
+		return nil, fmt.Errorf("could not create a new logger: %w", err)
+	}
+
 	cfg := jaegercfg.Configuration{
 		ServiceName: serviceName,
 		Sampler: &jaegercfg.SamplerConfig{
@@ -41,8 +47,7 @@ func NewJaegerTracer(serviceName, reporterHostName, reporterPort string) Tracer 
 	}
 
 	tracer, closer, err := cfg.NewTracer(
-		config.Logger(jaegerlog.StdLogger),
-		config.Metrics(metrics.NullFactory),
+		config.Logger(logger),
 	)
 	if err != nil {
 		log.Fatalf("could not initialise tracer: %v", err)
@@ -53,7 +58,7 @@ func NewJaegerTracer(serviceName, reporterHostName, reporterPort string) Tracer 
 	return JaegerTracer{
 		closer:       closer,
 		globalTracer: tracer,
-	}
+	}, nil
 }
 
 // StartSpan wraps StartSpan.

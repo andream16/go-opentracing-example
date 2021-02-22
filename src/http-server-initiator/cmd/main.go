@@ -44,7 +44,10 @@ func main() {
 
 	defer cancel()
 
-	tracer := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
+	tracer, err := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
+	if err != nil {
+		log.Fatalf("could not create new tracer: %v", err)
+	}
 	defer tracer.Close()
 
 	handler, err := transporthttp.NewHandler(

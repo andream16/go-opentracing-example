@@ -50,7 +50,10 @@ func main() {
 	var ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
-	tracer := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
+	tracer, err := tracing.NewJaegerTracer(serviceName, jaegerAgentHost, jaegerAgentPort)
+	if err != nil {
+		log.Fatalf("could not create new tracer: %v", err)
+	}
 	defer tracer.Close()
 
 	executor, err := pgxwrapper.New(ctx, databaseDSN, 10*time.Second, tracer)
