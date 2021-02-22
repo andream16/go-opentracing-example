@@ -1,0 +1,27 @@
+name: tests
+
+on: [pull_request]
+
+jobs:
+  test:
+    name: runs unit tests
+    strategy:
+      matrix:
+        go-version: [ 1.16.x ]
+        os: [ ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Installing go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Checking out code
+        uses: actions/checkout@v2
+
+      - name: Installing dependencies
+        run: |
+          go mod download
+          go mod vendor
+      - name: Running unit tests
+        run: go test ./... -count=10 -race
