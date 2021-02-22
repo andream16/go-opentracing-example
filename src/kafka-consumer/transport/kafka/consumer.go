@@ -12,6 +12,7 @@ import (
 
 	todov1 "github.com/andream16/go-opentracing-example/contracts/build/go/go_opentracing_example/grpc_server/todo/v1"
 	"github.com/andream16/go-opentracing-example/src/kafka-consumer/todo/repository"
+	"github.com/andream16/go-opentracing-example/src/shared/todo"
 	"github.com/andream16/go-opentracing-example/src/shared/tracing"
 )
 
@@ -19,21 +20,21 @@ const spanName = "todo_consumer"
 
 // Consumer represent a kafka transport consumer.
 type Consumer struct {
-	repo   repository.Creator
-	tracer tracing.Tracer
+	creator repository.Creator
+	tracer  tracing.Tracer
 }
 
 // NewConsumer returns a new consumer.
-func NewConsumer(repo repository.Creator, tracer tracing.Tracer) (Consumer, error) {
+func NewConsumer(creator repository.Creator, tracer tracing.Tracer) (Consumer, error) {
 	switch {
-	case repo == nil:
-		return Consumer{}, errors.New("repo could not be nil")
+	case creator == nil:
+		return Consumer{}, errors.New("repo must be not nil")
 	case tracer == nil:
-		return Consumer{}, errors.New("tracer could not be nil")
+		return Consumer{}, errors.New("tracer must be not nil")
 	}
 	return Consumer{
-		repo:   repo,
-		tracer: tracer,
+		creator: creator,
+		tracer:  tracer,
 	}, nil
 }
 
@@ -69,7 +70,7 @@ func (c Consumer) ReceivedMessage(message *sarama.ConsumerMessage) error {
 	if err == nil {
 		span = c.tracer.StartSpan(spanName, opentracing.FollowsFrom(spanCtx))
 	} else {
-		span = opentracing.StartSpan(spanName)
+		span = c.tracer.StartSpan(spanName)
 		log.Printf("could not create span: %v", err)
 	}
 
@@ -80,9 +81,9 @@ func (c Consumer) ReceivedMessage(message *sarama.ConsumerMessage) error {
 		return fmt.Errorf("could not deserialise todo: %v", err)
 	}
 
-	if err := c.repo.Create(
+	if err := c.creator.Create(
 		opentracing.ContextWithSpan(context.Background(), span),
-		&repository.Todo{
+		&todo.Todo{
 			Message: t.Message,
 		},
 	); err != nil {

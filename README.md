@@ -17,10 +17,6 @@ As you can see:
 You can run the project using `docker-compose up` (tbd)
 
 ## TODOS
- - Remove double trace from receiver.
- - Fix dependencies order to startup services.
- - Encapsulate span functionalities in tiny and separated packages.
- - Add tests.
  - Decorate traces to make search easier.
  - Use custom log (zap).
  - Investigate on metrics factory.
